@@ -9,6 +9,7 @@ let processResults = {
 
 // DOM元素
 const apiUrlInput = document.getElementById('apiUrl');
+const cookieInput = document.getElementById('cookieInput');
 const startBtn = document.getElementById('startBtn');
 const retryBtn = document.getElementById('retryBtn');
 const progressSection = document.getElementById('progressSection');
@@ -32,9 +33,20 @@ document.addEventListener('DOMContentLoaded', function() {
 // 开始处理流程
 async function startProcess() {
     const apiUrl = apiUrlInput.value.trim();
+    const cookie = cookieInput.value.trim();
     
     if (!apiUrl) {
         alert('请输入API文档链接');
+        return;
+    }
+
+    if (cookie.includes('\n') || cookie.includes('\r')) {
+        alert('Cookie 请粘贴为单行内容');
+        return;
+    }
+
+    if (cookie.toLowerCase().startsWith('cookie:')) {
+        alert('Cookie 输入框中请不要包含 Cookie: 前缀');
         return;
     }
     
@@ -55,7 +67,7 @@ async function startProcess() {
     
     try {
         // 开始处理流程
-        await processApiDocuments(apiUrl);
+        await processApiDocuments(apiUrl, cookie);
     } catch (error) {
         console.error('处理过程中出错:', error);
         showError(error.message || '处理过程中发生未知错误');
@@ -66,25 +78,31 @@ async function startProcess() {
 }
 
 // 处理API文档的主流程
-async function processApiDocuments(apiUrl) {
+async function processApiDocuments(apiUrl, cookie) {
     addLog('开始处理API文档...', 'info');
     addLog(`目标URL: ${apiUrl}`, 'info');
     
     // 阶段1: 下载原始数据
     const stage1Result = await executeStage(1, '下载llms.txt和MD文件', async () => {
+        const requestBody = { url: apiUrl };
+        if (cookie) {
+            requestBody.cookie = cookie;
+        }
+
         const response = await fetch('/api/stage1', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ url: apiUrl })
+            body: JSON.stringify(requestBody)
         });
+
+        const result = await response.json();
         
         if (!response.ok) {
-            throw new Error(`阶段1失败: ${response.statusText}`);
+            throw new Error(result.error || `阶段1失败: ${response.statusText}`);
         }
         
-        const result = await response.json();
         addLog(`下载完成: ${result.downloaded_files} 个文件`, 'success');
         return result;
     });

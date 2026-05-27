@@ -12,10 +12,12 @@ import re
 class ApiDownloader:
     """API文档下载器"""
     
-    def __init__(self, base_url, output_dir='data/01', max_workers=5):
+    def __init__(self, base_url, output_dir='data/01', max_workers=5, cookie=None):
         self.base_url = base_url.rstrip('/')
         self.output_dir = output_dir
         self.max_workers = max_workers
+        self.cookie = self._normalize_cookie(cookie)
+        self.base_origin = self._get_origin(self.base_url)
         self.session = requests.Session()
         
         # 设置请求头
@@ -34,6 +36,72 @@ class ApiDownloader:
         print(f"下载器初始化完成 - 基础URL: {self.base_url}")
         print(f"输出目录: {self.output_dir}")
         print(f"最大并发数: {self.max_workers}")
+
+    @staticmethod
+    def _normalize_cookie(cookie):
+        """验证并规范化可选的Cookie请求头值"""
+        if cookie is None:
+            return None
+        if not isinstance(cookie, str):
+            raise ValueError("Cookie参数必须是字符串")
+        if '\r' in cookie or '\n' in cookie:
+            raise ValueError("Cookie参数不能包含换行符")
+
+        normalized_cookie = cookie.strip()
+        return normalized_cookie or None
+
+    @staticmethod
+    def _get_origin(url):
+        """返回URL的同源比较值（协议、主机、有效端口）"""
+        parsed_url = urlparse(url)
+        scheme = parsed_url.scheme.lower()
+        hostname = (parsed_url.hostname or '').lower()
+
+        try:
+            port = parsed_url.port
+        except ValueError:
+            return None
+
+        if port is None:
+            port = {'http': 80, 'https': 443}.get(scheme)
+
+        return scheme, hostname, port
+
+    def _is_same_origin(self, url):
+        """检查目标URL是否与文档基础URL同源"""
+        return self._get_origin(url) == self.base_origin
+
+    def _get(self, url, timeout=30):
+        """发送GET请求，并在每次重定向前重新校验Cookie发送范围"""
+        current_url = url
+        history = []
+
+        while True:
+            headers = {}
+            if self.cookie and self._is_same_origin(current_url):
+                headers['Cookie'] = self.cookie
+
+            response = self.session.get(
+                current_url,
+                timeout=timeout,
+                headers=headers,
+                allow_redirects=False
+            )
+            response.history = list(history)
+
+            if not response.is_redirect:
+                return response
+
+            if len(history) >= self.session.max_redirects:
+                response.close()
+                raise requests.exceptions.TooManyRedirects(
+                    f"超过最大重定向次数: {self.session.max_redirects}",
+                    response=response
+                )
+
+            history.append(response)
+            current_url = urljoin(response.url, response.headers['Location'])
+            response.close()
     
     def download_llms_txt(self):
         """下载llms.txt文件"""
@@ -43,7 +111,7 @@ class ApiDownloader:
         print(f"开始下载llms.txt: {llms_url}")
         
         try:
-            response = self.session.get(llms_url, timeout=30)
+            response = self._get(llms_url, timeout=30)
             response.raise_for_status()
             
             # 保存文件
@@ -78,7 +146,7 @@ class ApiDownloader:
             
             print(f"下载: {filename} <- {full_url}")
             
-            response = self.session.get(full_url, timeout=30)
+            response = self._get(full_url, timeout=30)
             response.raise_for_status()
             
             # 保存文件

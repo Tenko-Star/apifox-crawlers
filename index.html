@@ -27,7 +27,13 @@
                     <label for="apiUrl">API文档链接:</label>
                     <input type="url" id="apiUrl" value="https://doubao.apifox.cn/" placeholder="例如: https://doubao.apifox.cn/" required>
                     <small>请输入完整的API文档基础URL</small>
-                </div>  
+                </div>
+
+                <div class="form-group">
+                    <label for="cookieInput">Cookie（可选）:</label>
+                    <textarea id="cookieInput" rows="4" placeholder="例如: session=xxx; token=yyy"></textarea>
+                    <small>受保护文档可粘贴浏览器请求中的 Cookie 值（不含 Cookie: 前缀）。仅用于本次抓取，不会写入结果或日志。</small>
+                </div>
                 
                 <button id="startBtn" class="btn-primary">
                     <span class="btn-text">开始抓取</span>

@@ -95,11 +95,26 @@ def get_status():
 def stage1_download():
     """阶段1: 下载llms.txt和MD文件"""
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({'error': '请求参数格式无效'}), 400
+
         api_url = data.get('url')
+        cookie = data.get('cookie')
         
         if not api_url:
             return jsonify({'error': '缺少URL参数'}), 400
+
+        if cookie is not None:
+            if not isinstance(cookie, str):
+                return jsonify({'error': 'Cookie参数必须是字符串'}), 400
+            if '\r' in cookie or '\n' in cookie:
+                return jsonify({'error': 'Cookie参数不能包含换行符'}), 400
+
+            cookie = cookie.strip()
+            if cookie.lower().startswith('cookie:'):
+                return jsonify({'error': '请仅填写Cookie值，不要包含Cookie:前缀'}), 400
+            cookie = cookie or None
         
         # 清理旧数据目录
         task_manager.update_status(stage=1, status='running', message='清理旧数据...', progress=0)
@@ -108,7 +123,7 @@ def stage1_download():
         task_manager.update_status(message='开始下载数据...', progress=5)
         
         # 创建下载器实例
-        downloader = ApiDownloader(base_url=api_url, output_dir='data/01')
+        downloader = ApiDownloader(base_url=api_url, output_dir='data/01', cookie=cookie)
         
         # 下载llms.txt
         task_manager.update_status(message='下载llms.txt...', progress=10)
